@@ -29,18 +29,25 @@ mba-ia-refactor-projects-skill/
 │   ├── audit-project-1.md
 │   ├── audit-project-2.md
 │   └── audit-project-3.md
+├── Evidencias/
+│   ├── 1.png                       # invocação da skill
+│   ├── AntesRefatoracao/           # prints por projeto
+│   └── DepoisRefatoracao/          # prints por projeto
 ├── code-smells-project/            # Python + Flask (E-commerce)
 │   ├── .claude/skills/refactor-arch/
+│   ├── .claude/commands/refactor-arch.md
 │   ├── .opencode/command/refactor-arch.md
 │   ├── opencode.json
 │   └── ...
 ├── ecommerce-api-legacy/           # Node.js + Express (LMS/checkout)
 │   ├── .claude/skills/refactor-arch/
+│   ├── .claude/commands/refactor-arch.md
 │   ├── .opencode/command/refactor-arch.md
 │   ├── opencode.json
 │   └── src/
 └── task-manager-api/               # Python + Flask (Task Manager)
     ├── .claude/skills/refactor-arch/
+    ├── .claude/commands/refactor-arch.md
     ├── .opencode/command/refactor-arch.md
     ├── opencode.json
     └── ...
@@ -126,16 +133,76 @@ Status e prioridades são strings/inteiros soltos repetidos em vários arquivos;
 
 ## Construção da skill
 
-Com a ajuda do DeepSeek, montei seis arquivos de referência para a skill:
+A skill está em `.claude/skills/refactor-arch/`, com a mesma cópia nos três projetos:
 
-- `anti-patterns.md`
-- `mvc-guidelines.md`
-- `project-analysis.md`
-- `refactoring-playbook.md`
-- `report-template.md`
-- `validation.md`
+```text
+.claude/skills/refactor-arch/
+├── SKILL.md
+└── references/
+    ├── project-analysis.md       # heurísticas de stack, banco, domínio e arquitetura
+    ├── anti-patterns.md          # catálogo com sinais de detecção e severidades
+    ├── report-template.md        # formato exato do relatório da Fase 2
+    ├── mvc-guidelines.md         # responsabilidades de cada camada MVC
+    ├── refactoring-playbook.md   # transformações antes/depois
+    └── validation.md             # checklist de boot, endpoints e regressão
+```
 
-Usei a própria estrutura do sistema como base e levei em conta segurança, criticidade, melhorias no código e boas práticas de desenvolvimento. A ideia é facilitar a análise dos projetos, identificar problemas e oportunidades de melhoria e manter um padrão de qualidade e organização no código.
+### Decisões do `SKILL.md`
+
+- Três fases sequenciais com saídas padronizadas: Análise → Auditoria → Refatoração.
+- Gate humano obrigatório: a Fase 2 termina com
+  `Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` e nenhum arquivo
+  de código é alterado antes do `y`.
+- Todo finding precisa de `arquivo:linha` exatos; a skill não pode inventar achados.
+- Contrato HTTP preservado: paths e métodos continuam os mesmos. Endpoints
+  perigosos podem ser desativados ou restritos, mas a decisão é registrada.
+- Segredos nunca são reproduzidos por inteiro; o relatório mascara os valores.
+- Projetos já organizados são evoluídos, não reescritos.
+
+### Catálogo e playbook
+
+O catálogo tem **25 anti-patterns** (6 CRITICAL, 6 HIGH, 7 MEDIUM e 6 LOW),
+incluindo os que aparecem nos três projetos: credenciais hardcoded, SQL Injection,
+God Class/File, senha em texto puro/weak hash, exposição de dados sensíveis, N+1,
+validação duplicada, estado global mutável, callback hell e APIs deprecated.
+Priorizei esses padrões porque aparecem nos três projetos e são os de maior impacto
+arquitetural/segurança, com sinais de detecção acionáveis (ex.: query dentro de
+`for`, senha em `to_dict`, `SELECT` sem `LIMIT`). Há também uma tabela de APIs
+obsoletas com o equivalente moderno (`datetime.utcnow()`, `Query.get()`,
+`new Buffer()`, `url.parse()`, `crypto.createCipher`, `body-parser` etc.). No
+Projeto 3, `datetime.utcnow()` e `Query.get()` foram detectados e substituídos;
+no Projeto 2, o scan registrou dependências transitivas desatualizadas.
+
+O playbook tem **15 transformações** com exemplos antes/depois: config por env,
+queries parametrizadas, quebra de God Class/File, rotas finas + controllers, erro
+centralizado, eliminação de N+1, hash forte de senha, transações, injeção de
+dependência, validação centralizada, remoção de dados sensíveis, APIs modernas,
+paginação, async/await e restrição de endpoints perigosos.
+
+### Como a skill é agnóstica de tecnologia
+
+1. A Fase 1 procura manifests (`package.json`, `requirements.txt`, etc.), imports
+   e padrões de bootstrap.
+2. O MVC alvo é descrito por responsabilidades, não por caminhos fixos; há
+   exemplos para Flask e Express.
+3. O playbook mostra as mesmas transformações nas duas stacks.
+4. A validação é genérica: boot + smoke test dos endpoints inventariados.
+5. A skill não contém nome de projeto, caminho absoluto nem regra exclusiva de um
+   dos três repositórios.
+6. O catálogo de APIs deprecated cobre Python/Flask/SQLAlchemy e Node/Express.
+
+### Desafios e soluções
+
+| Desafio | Solução |
+|---|---|
+| Preservar contratos ao corrigir segurança | Rotas mantidas; `/admin/query` responde 410, `/admin/reset-db` exige token, a auth admin do Projeto 2 é opt-in e o Projeto 3 usa `AUTH_REQUIRED`. |
+| Projeto 2 com callbacks e transações | Wrappers Promise, fila de transações e `async/await`; o checkout inteiro roda em transação. |
+| Projeto 3 já parcialmente organizado | Extração incremental de controllers, config, middlewares e validators, sem recriar models/services. |
+| N+1 nos relatórios | JOIN, `group_by` e `joinedload`; uma query para o relatório financeiro e agregações no Task Manager. |
+| Datas deprecated no SQLite | Helper `utcnow()` com `datetime.now(timezone.utc)` e remoção do `tzinfo` para manter compatibilidade. |
+| Validação real | Smoke tests com 35, 20 e 31 requisições, além do boot real dos três apps. |
+
+Detalhes completos das decisões e do inventário de arquivos: [`doc.md`](doc.md).
 
 ## Como executar a skill `/refactor-arch`
 
@@ -151,6 +218,8 @@ Dentro do opencode:
 ```text
 /refactor-arch
 ```
+
+![Skill /refactor-arch sendo invocada no opencode](./Evidencias/1.png)
 
 A skill roda em três fases:
 
@@ -267,15 +336,16 @@ python app.py
 - `AUTH_REQUIRED=true` exige `Authorization: Bearer <token>` (token do `/login`).
 - Variáveis em `.env.example`.
 
-## Resultados antes da refatoração
+## Resultados
 
-Rodei a skill no opencode com DeepSeek e guardei os prints:
+O health do Projeto 1 resume o antes/depois: a versão original expunha `secret_key`
+e `debug`; a refatorada devolve apenas contadores e status.
 
-![alt](./Evidencias/1.png)
-![alt](./Evidencias/2.png)
-![alt](./Evidencias/3.png)
+| Antes | Depois |
+|---|---|
+| ![Health antes](./Evidencias/2.png) | ![Health depois](./Evidencias/3.png) |
 
-### Relatórios de auditoria (`reports/`)
+### Resumo dos relatórios de auditoria (`reports/`)
 
 Os três relatórios gerados pela skill somam 63 achados (21 por projeto):
 
@@ -283,10 +353,137 @@ Os três relatórios gerados pela skill somam 63 achados (21 por projeto):
 |---|---|---|---|---|---|---|---|
 | `code-smells-project` | Python + Flask | 5 | 5 | 6 | 5 | 21 | SQL Injection, endpoint de SQL arbitrário, segredos hardcoded |
 | `ecommerce-api-legacy` | Node.js + Express | 5 | 6 | 5 | 5 | 21 | credenciais e cartão em logs, hash fraco, bypass de login, God Class |
-| `task-manager-api` | Python + Flask | 5 | 4 | 7 | 5 | 21 | MD5 sem salt, hash exposto na API, token JWT fake, rotas sem auth |
-| **Total** | — | **15** | **15** | **18** | **15** | **63** | — |
+| `task-manager-api` | Python + Flask | 4 | 5 | 6 | 6 | 21 | MD5 sem salt, hash exposto na API, token JWT fake, rotas sem auth |
+| **Total** | — | **14** | **16** | **17** | **16** | **63** | — |
 
-**O que os números mostram:** os três projetos têm a mesma quantidade de achados, mas perfis diferentes. Os 15 CRITICAL se concentram em credenciais hardcoded, autenticação ausente/fraca e exposição de dados sensíveis — problemas de segurança que devem ser tratados antes de qualquer refatoração estrutural. Os padrões se repetem entre stacks: segredos no código, God Classes/Files, validações duplicadas, queries N+1 e tratamento de erro inconsistente. Isso mostra que a skill conseguiu identificar os mesmos anti-patterns em Python e Node.js, mantendo a classificação por severidade e as recomendações de separação em camadas MVC.
+**O que os números mostram:** os três projetos têm a mesma quantidade de achados, mas perfis diferentes. Os 14 CRITICAL se concentram em credenciais hardcoded, autenticação ausente/fraca e exposição de dados sensíveis — problemas de segurança que devem ser tratados antes de qualquer refatoração estrutural. Os padrões se repetem entre stacks: segredos no código, God Classes/Files, validações duplicadas, queries N+1 e tratamento de erro inconsistente. Isso mostra que a skill conseguiu identificar os mesmos anti-patterns em Python e Node.js, mantendo a classificação por severidade e as recomendações de separação em camadas MVC.
+
+### Antes × depois da estrutura
+
+| Projeto | Antes | Depois |
+|---|---|---|
+| `code-smells-project` | Monolito em 4 arquivos: `app.py` (rotas + admin perigoso + debug), `controllers.py`, `models.py` (SQL + regra + serialização) e `database.py` (conexão global + seed). | `config/`, `models/`, `views/`, `controllers/`, `middlewares/`, `services/` e `utils/`, com `app.py` como composition root. |
+| `ecommerce-api-legacy` | 3 arquivos: `src/app.js`, `src/AppManager.js` (God Class) e `src/utils.js` (segredos + cache global + weak hash). | `src/config`, `db`, `models`, `services`, `controllers`, `routes`, `middlewares` e `utils`, com `src/app.js` como composition root. |
+| `task-manager-api` | MVC parcial: `models/`, `routes/` gordas, `services/` e `utils/`; regra de negócio e validação dentro das rotas. | Controllers, config, middlewares, services e rotas finas; models com hash forte e DTO sem senha. |
+
+As árvores completas estão em [`doc.md`](doc.md#62-antesdepois-da-estrutura).
+
+### Checklist de validação preenchido
+
+| Critério | Projeto 1 | Projeto 2 | Projeto 3 |
+|---|---|---|---|
+| Linguagem detectada corretamente | OK — Python | OK — JavaScript/Node | OK — Python |
+| Framework detectado corretamente | OK — Flask 3.1.1 | OK — Express 4.18.2 | OK — Flask 3.0.0 |
+| Domínio descrito corretamente | OK — E-commerce | OK — LMS/checkout | OK — Task Manager |
+| Nº de arquivos condiz com a realidade | OK — 4 | OK — 3 | OK — 11 |
+| Relatório segue o template | OK | OK | OK |
+| Cada finding tem arquivo/linha | OK | OK | OK |
+| Findings ordenados CRITICAL → LOW | OK | OK | OK |
+| Mínimo de 5 findings | OK — 21 | OK — 21 | OK — 21 |
+| APIs deprecated (se aplicável) | OK — nenhuma no source | OK — deps transitivas | OK — `utcnow` + `Query.get` |
+| Pausa/confirmação antes da Fase 3 | OK | OK | OK |
+| Estrutura de diretórios MVC | OK | OK | OK |
+| Configuração em módulo (sem hardcoded) | OK | OK | OK |
+| Models abstraem dados | OK | OK | OK |
+| Views/Routes separadas | OK | OK | OK |
+| Controllers concentram o fluxo | OK | OK | OK |
+| Error handling centralizado | OK | OK | OK |
+| Entry point claro | OK | OK | OK |
+| Aplicação inicia sem erros | OK | OK | OK |
+| Endpoints originais respondem | OK — 19/19* | OK — 3/3 | OK — 22/22 |
+
+\* `POST /admin/query` foi desativado e responde `410 Gone`; `POST /admin/reset-db`
+exige `X-Admin-Token`. No Projeto 2, as rotas admin exigem token apenas se
+`ADMIN_TOKEN` estiver definido. No Projeto 3, `AUTH_REQUIRED=false` por padrão;
+com `true`, todas as rotas exceto `/`, `/health` e `/login` exigem Bearer token.
+
+### Evidências antes/depois
+
+#### Projeto 1 — `code-smells-project`
+
+| Antes | Depois |
+|---|---|
+| ![Health antes](./Evidencias/AntesRefatoracao/code-smells-project/1.png) | ![Health depois](./Evidencias/DepoisRefatoracao/code-smells-project/1.png) |
+| `/health` expunha `secret_key` e `debug`. | `/health` devolve apenas contadores e status. |
+| ![Usuários antes](./Evidencias/AntesRefatoracao/code-smells-project/2.png) | ![Usuários depois](./Evidencias/DepoisRefatoracao/code-smells-project/2.png) |
+| `/usuarios` devolvia `senha` em texto puro. | `/usuarios` omite `senha` e inclui paginação. |
+| ![Login antes](./Evidencias/AntesRefatoracao/code-smells-project/3.png) | ![Login depois](./Evidencias/DepoisRefatoracao/code-smells-project/3.png) |
+| Login respondia sem token. | Login devolve token assinado. |
+| ![Admin query antes](./Evidencias/AntesRefatoracao/code-smells-project/4.png) | ![Admin query depois](./Evidencias/DepoisRefatoracao/code-smells-project/4.png) |
+| `/admin/query` executava o SQL enviado pelo cliente. | `/admin/query` responde que o endpoint foi removido por segurança. |
+| ![Admin reset antes](./Evidencias/AntesRefatoracao/code-smells-project/5.png) | ![Admin reset depois](./Evidencias/DepoisRefatoracao/code-smells-project/5.png) |
+| `/admin/reset-db` apagava o banco sem autenticação. | `/admin/reset-db` responde não autorizado sem o token. |
+
+#### Projeto 2 — `ecommerce-api-legacy`
+
+| Antes | Depois |
+|---|---|
+| ![Relatório antes](./Evidencias/AntesRefatoracao/ecommerce-api-legacy/1.png) | ![Relatório depois](./Evidencias/DepoisRefatoracao/ecommerce-api-legacy/1.png) |
+| O relatório financeiro era acessível sem autenticação. | O relatório exige `X-Admin-Token` quando `ADMIN_TOKEN` está definido. |
+| ![Checkout antes](./Evidencias/AntesRefatoracao/ecommerce-api-legacy/2.png) | ![Checkout depois](./Evidencias/DepoisRefatoracao/ecommerce-api-legacy/2.png) |
+| Checkout aceitava senha errada e criava a matrícula. | Checkout devolve `401 Credenciais inválidas`. |
+
+#### Projeto 3 — `task-manager-api`
+
+| Antes | Depois |
+|---|---|
+| ![Health antes](./Evidencias/AntesRefatoracao/task-manager-api/1.png) | ![Health depois](./Evidencias/DepoisRefatoracao/task-manager-api/1.png) |
+| Health respondia `200`. | Health continua respondendo `200` após a refatoração. |
+| ![Usuário antes](./Evidencias/AntesRefatoracao/task-manager-api/2.png) | ![Usuário depois](./Evidencias/DepoisRefatoracao/task-manager-api/2.png) |
+| `/users/1` expunha o hash da senha. | `/users/1` não devolve mais `password`. |
+| ![Login antes](./Evidencias/AntesRefatoracao/task-manager-api/3.png) | ![Login depois](./Evidencias/DepoisRefatoracao/task-manager-api/3.png) |
+| Login devolvia `fake-jwt-token-1` e o hash da senha. | Login devolve um token assinado real e o usuário sem hash. |
+
+### Logs pós-refatoração
+
+```text
+# Projeto 1
+ * Serving Flask app 'app'
+ * Debug mode: off
+health: 200 {"counts":{"pedidos":0,"produtos":10,"usuarios":3},"database":"connected","status":"ok","versao":"1.0.0"}
+OK: 35 requests validated
+```
+
+```text
+# Projeto 2
+{"timestamp":"2026-11-04T01:17:26.015Z","level":"info","message":"Frankenstein LMS rodando","meta":{"port":3000,"database":":memory:"}}
+health: 200 {"status":"ok"}
+OK: 20 checks passed
+```
+
+```text
+# Projeto 3
+ * Serving Flask app 'app'
+ * Debug mode: off
+health: 200 {"status":"ok","timestamp":"2026-11-04T01:24:21.081540+00:00"}
+login: 200 token=True userHasPassword=False
+OK: 31 requests validated + auth middleware
+```
+
+### Observações por stack
+
+- **Projeto 1 (monolito Python/Flask):** a skill aplicou o conjunto completo de
+  transformações, separou os quatro domínios e eliminou SQL Injection, senha em
+  claro, endpoint de SQL arbitrário e estado global. Foi o caso de maior esforço
+  estrutural.
+- **Projeto 2 (Node/Express):** a skill adaptou o playbook para callbacks →
+  Promises/async-await, transações serializadas, injeção de dependência no
+  composition root e uma única query para o relatório. A simulação de pagamento
+  por prefixo do cartão foi preservada, sem logar cartão ou chave.
+- **Projeto 3 (Flask já organizado):** a skill não recriou a estrutura; adicionou
+  controllers/config/middlewares, moveu regra das rotas para services, corrigiu
+  segurança e substituiu APIs deprecated. Isso comprova a regra "evoluir, não
+  reescrever".
+
+### Riscos residuais
+
+- **Projeto 1:** endpoints de negócio continuam públicos porque o original não
+  tinha fluxo de login/autorização; as rotas administrativas foram protegidas.
+- **Projeto 2:** a auth admin é opt-in e o `npm audit` ainda reporta
+  vulnerabilidades em dependências transitivas; recomenda-se `npm audit fix` com
+  testes antes de produção.
+- **Projeto 3:** `AUTH_REQUIRED=false` por padrão para preservar compatibilidade;
+  habilite em produção. Senhas de seed são fracas, embora agora hasheadas.
 
 ## Como validar a refatoração
 

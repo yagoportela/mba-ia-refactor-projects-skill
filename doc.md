@@ -10,8 +10,9 @@ com IA*.
 **Ferramenta agêntica:** opencode (suporta Skills; a skill também está no path
 canônico do Claude Code, `.claude/skills/refactor-arch/`).
 
-**Git:** nenhum comando git foi executado (sem `init`, `add`, `commit` ou `push`),
-conforme solicitação do avaliador.
+**Git:** o código refatorado, a skill e os relatórios já estão commitados. Os
+prints de evidência estão no índice (staged) e o `README.md` foi atualizado no
+working tree para o commit final.
 
 ---
 
@@ -66,7 +67,8 @@ Validação final:
 10. **Validação** com smoke tests temporários e boot real dos três apps.
 11. **Documentação**: README de execução, READMEs dos projetos, relatórios e este
     `doc.md`.
-12. **Git:** nenhum comando executado.
+12. **Git:** código refatorado, skill e relatórios commitados; prints de evidência
+    adicionados ao índice e `README.md` atualizado no working tree.
 
 ---
 
@@ -768,13 +770,19 @@ Critérios de aceite:
 
 ## 8. Observação sobre git
 
-Nenhum `git init`, `git add`, `git commit` ou `git push` foi executado. O
-repositório está no estado de trabalho para avaliação. Quando o envio for
-autorizado, os arquivos relevantes são:
+O repositório já contém os commits da refatoração. No momento desta atualização:
+
+- código refatorado, skill, relatórios e documentação: commitados;
+- prints em `Evidencias/`: adicionados ao índice (staged);
+- `README.md` e este `doc.md`: atualizados no working tree.
+
+Para o envio final, faltam apenas o commit da documentação/evidências e o push
+para o fork público:
 
 ```bash
-git add .
-git commit -m "feat: skill refactor-arch + refatoração MVC dos 3 projetos"
+git add README.md doc.md Evidencias
+git commit -m "docs: adiciona evidências antes/depois e completa o README"
+git push
 ```
 
 ---
