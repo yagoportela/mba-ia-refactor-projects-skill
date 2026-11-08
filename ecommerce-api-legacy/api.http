@@ -1,4 +1,9 @@
 @baseUrl = http://localhost:3000
+# Se ADMIN_TOKEN estiver definido no ambiente, envie o mesmo valor abaixo.
+@adminToken = dev-admin-token
+
+### Health
+GET {{baseUrl}}/health
 
 ### Checkout - sucesso
 POST {{baseUrl}}/api/checkout
@@ -26,6 +31,8 @@ Content-Type: application/json
 
 ### Relatório financeiro administrativo
 GET {{baseUrl}}/api/admin/financial-report
+X-Admin-Token: {{adminToken}}
 
 ### Deletar usuário
 DELETE {{baseUrl}}/api/users/1
+X-Admin-Token: {{adminToken}}
